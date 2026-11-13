@@ -29,6 +29,9 @@
   function scoreRound(r, rules, nagariStreak) {
     var items = [];
 
+    // 점수 바로 입력 방식: 손으로 센 패 점수(r.score)를 그대로 쓰고, 박은 체크한 대로 적용한다
+    if (r.direct) return finish(r, rules, nagariStreak, r.score ? [{ label: '패 점수', pts: r.score }] : [], true, true, !!r.meong);
+
     var gwangPts = 0;
     if (r.gwang >= 5) gwangPts = 15;
     else if (r.gwang === 4) gwangPts = 4;
@@ -49,6 +52,11 @@
     var piPts = r.pi >= 10 ? r.pi - 9 : 0;
     if (piPts) items.push({ label: '피 ' + r.pi + '장', pts: piPts });
 
+    return finish(r, rules, nagariStreak, items, piPts > 0, gwangPts > 0, r.yeol >= 7);
+  }
+
+  // 패 점수 항목에 고·배수·상한을 적용해 최종 점수와 금액을 낸다
+  function finish(r, rules, nagariStreak, items, canPibak, canGwangbak, meong) {
     var base = 0;
     for (var i = 0; i < items.length; i++) base += items[i].pts;
 
@@ -59,9 +67,9 @@
     var mults = [];
     if (go >= 3) mults.push({ label: go + '고', x: Math.pow(2, go - 2) });
     if (r.shake > 0) mults.push({ label: '흔들기·폭탄 ' + r.shake + '회', x: Math.pow(2, r.shake) });
-    if (rules.meongtta && r.yeol >= 7) mults.push({ label: '멍따', x: 2 });
-    if (r.pibak && piPts > 0) mults.push({ label: '피박', x: 2 });
-    if (r.gwangbak && gwangPts > 0) mults.push({ label: '광박', x: 2 });
+    if (rules.meongtta && meong) mults.push({ label: '멍박', x: 2 });
+    if (r.pibak && canPibak) mults.push({ label: '피박', x: 2 });
+    if (r.gwangbak && canGwangbak) mults.push({ label: '광박', x: 2 });
     if (r.gobak && rules.gobak) mults.push({ label: '고박', x: 2 });
     if (nagariStreak > 0) mults.push({ label: '나가리 ' + nagariStreak + '판 뒤', x: Math.pow(2, nagariStreak) });
 

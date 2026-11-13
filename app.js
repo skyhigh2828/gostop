@@ -9,6 +9,7 @@
 
   var state = load() || { started: false, names: ['', ''], rules: clone(C.DEFAULT_RULES), log: [] };
   state.rules = Object.assign(clone(C.DEFAULT_RULES), state.rules);
+  if (state.inputMode !== 'cards') state.inputMode = 'direct'; // 기본은 점수 바로 입력
   var draft = newDraft();
   var tab = 'input';
 
@@ -20,7 +21,7 @@
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* 저장이 막힌 환경에서도 계산은 계속된다 */ }
   }
   function newDraft() {
-    return { winner: null, gwang: 0, bigwang: false, yeol: 0, godori: false, tti: 0, hongdan: false, cheongdan: false, chodan: false, pi: 0, go: 0, shake: 0, pibak: false, gwangbak: false, gobak: false };
+    return { winner: null, score: 0, meong: false, gwang: 0, bigwang: false, yeol: 0, godori: false, tti: 0, hongdan: false, cheongdan: false, chodan: false, pi: 0, go: 0, shake: 0, pibak: false, gwangbak: false, gobak: false };
   }
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
@@ -116,6 +117,7 @@
 
   // ───────── 게임 화면 ─────────
   function normalize(d) {
+    if (state.inputMode === 'direct') return;
     if (d.gwang !== 3) d.bigwang = false;
     if (d.gwang < 3) d.gwangbak = false;
     if (d.yeol < 3) d.godori = false; // 고도리는 열끗 3장이 필요하다
@@ -132,7 +134,7 @@
   function chip(key, label, disabled) {
     return '<button class="chip' + (draft[key] ? ' on' : '') + '" data-chip="' + key + '"' + (disabled ? ' disabled' : '') + '>' + label + '</button>';
   }
-  var LIMITS = { gwang: 5, yeol: 9, tti: 10, pi: 40, go: 9, shake: 4 };
+  var LIMITS = { score: 999, gwang: 5, yeol: 9, tti: 10, pi: 40, go: 9, shake: 4 };
 
   function rulesLine() {
     var r = state.rules, parts = ['점 ' + r.pointValue.toLocaleString('ko-KR'), r.goalScore + '점 나기'];
@@ -156,9 +158,10 @@
     app.innerHTML = html;
   }
 
+  function roundFromDraft() { return Object.assign({ direct: state.inputMode === 'direct' }, draft); }
+
   function inputHtml(s) {
-    var d = draft, r = state.rules;
-    var res = C.scoreRound(d, r, s.nagariStreak);
+    var d = draft, r = state.rules, direct = state.inputMode === 'direct';
     var loser = d.winner === null ? '패자' : name(1 - d.winner);
     var danCount = [d.hongdan, d.cheongdan, d.chodan].filter(Boolean).length;
     var danFull = (danCount + 1) * 3 > d.tti;
@@ -168,7 +171,15 @@
       return '<button data-winner="' + i + '" class="' + (d.winner === i ? 'on' : '') + '">' + esc(name(i)) + '</button>';
     }).join('') + '</div></div>';
 
-    h += '<div class="card"><h2>이긴 사람이 먹은 패</h2>' +
+    if (direct) h += '<div class="card"><h2>점수</h2>' +
+      '<div class="row"><span class="lbl">패 점수<small>고 점수 제외</small></span><div class="step">' +
+      '<button data-step="score" data-d="-1" aria-label="점수 줄이기">−</button>' +
+      '<input id="score" type="number" inputmode="numeric" min="0" max="999" placeholder="0" value="' + (d.score || '') + '">' +
+      '<button data-step="score" data-d="1" aria-label="점수 늘리기">+</button></div></div>' +
+      stepper('go', '고') + stepper('shake', '흔들기·폭탄') +
+      '<button class="del" data-mode="cards">패 장수로 계산하기</button></div>';
+
+    if (!direct) h += '<div class="card"><h2>이긴 사람이 먹은 패</h2>' +
       stepper('gwang', '광') +
       (d.gwang === 3 ? '<div class="chips">' + chip('bigwang', '비광 포함') + '</div>' : '') +
       '<hr class="sep">' + stepper('yeol', '열끗') +
@@ -178,16 +189,26 @@
       '<hr class="sep">' + stepper('pi', '피', '<button class="five" data-step="pi" data-d="5">+5</button>') +
       '<p class="note">쌍피는 2장으로 세어 합계를 넣습니다.</p></div>';
 
-    h += '<div class="card"><h2>고 · 흔들기</h2>' + stepper('go', '고') + stepper('shake', '흔들기·폭탄') + '</div>';
+    if (!direct) h += '<div class="card"><h2>고 · 흔들기</h2>' + stepper('go', '고') + stepper('shake', '흔들기·폭탄') +
+      '<button class="del" data-mode="direct">점수 바로 입력하기</button></div>';
 
-    h += '<div class="card"><h2>' + esc(loser) + ' 쪽 체크</h2><div class="chips">' +
-      chip('pibak', '피박 (피 ' + r.pibakLimit + '장 이하)', !piPts) +
-      chip('gwangbak', '광박 (광 0장)', !gwangPts) +
+    h += '<div class="card"><h2>' + esc(loser) + ' 박 체크</h2><div class="chips">' +
+      chip('pibak', '피박', !direct && !piPts) +
+      chip('gwangbak', '광박', !direct && !gwangPts) +
+      (direct && r.meongtta ? chip('meong', '멍박') : '') +
       (r.gobak ? chip('gobak', '고박') : '') + '</div>' +
-      '<p class="note">피박은 승자가 피로, 광박은 승자가 광으로 점수를 냈을 때만 누를 수 있습니다.</p></div>';
+      '<p class="note">피박은 피 ' + r.pibakLimit + '장 이하, 광박은 광 0장' + (r.meongtta ? ', 멍박은 승자 열끗 7장 이상' : '') + '일 때입니다.</p></div>';
 
-    h += '<div class="card result"><h2>이번 판</h2>';
-    if (!res.items.length) h += '<div class="note">패를 입력하면 점수가 계산됩니다.</div>';
+    h += '<div id="live">' + liveHtml(s) + '</div>';
+    return h + eventsHtml();
+  }
+
+  // 점수를 타이핑하는 동안에는 이 부분만 다시 그린다 (입력 칸의 커서를 유지하기 위해)
+  function liveHtml(s) {
+    var d = draft, r = state.rules;
+    var res = C.scoreRound(roundFromDraft(), r, s.nagariStreak);
+    var h = '<div class="card result"><h2>이번 판</h2>';
+    if (!res.items.length) h += '<div class="note">점수를 입력하면 금액이 계산됩니다.</div>';
     res.items.forEach(function (it) { h += '<div class="line"><span>' + it.label + '</span><span>' + it.pts + '점</span></div>'; });
     if (res.goAdd) h += '<div class="line"><span>고 점수</span><span>+' + res.goAdd + '점</span></div>';
     res.mults.forEach(function (m) { h += '<div class="line"><span>' + m.label + '</span><span>×' + m.x + '</span></div>'; });
@@ -203,6 +224,11 @@
       '<button class="ghost" id="nagari">나가리</button></div>';
     if (s.nagariStreak) h += '<p class="note">직전 판이 나가리라 이번 판은 ' + Math.pow(2, s.nagariStreak) + '배입니다.</p>';
 
+    return h;
+  }
+
+  function eventsHtml() {
+    var r = state.rules, h = '';
     var ev = Object.keys(C.EVENT_LABELS).filter(function (k) { return r[k] > 0; });
     if (ev.length) {
       h += '<div class="card" style="margin-top:12px"><h2>바로 주고받기</h2><div class="events">' + ev.map(function (k) {
@@ -246,8 +272,14 @@
 
   // ───────── 입력 처리 ─────────
   app.addEventListener('input', function (ev) {
-    if (!state.started && ev.target.type === 'number') updateMoneyHints();
+    if (!state.started && ev.target.type === 'number') { updateMoneyHints(); return; }
+    if (ev.target.id === 'score') {
+      var v = parseInt(ev.target.value, 10);
+      draft.score = isFinite(v) && v > 0 ? Math.min(v, LIMITS.score) : 0;
+      document.getElementById('live').innerHTML = liveHtml(C.settle(state.log, state.rules));
+    }
   });
+  app.addEventListener('focusin', function (ev) { if (ev.target.id === 'score') ev.target.select(); });
 
   app.addEventListener('click', function (ev) {
     var t = ev.target.closest('button');
@@ -259,6 +291,10 @@
       save(); render(); window.scrollTo(0, 0); return;
     }
     if (ds.tab) { tab = ds.tab; render(); return; }
+    if (ds.mode) {
+      var w = draft.winner;
+      state.inputMode = ds.mode; draft = newDraft(); draft.winner = w; save(); render(); return;
+    }
     if (ds.winner !== undefined) { draft.winner = +ds.winner; render(); return; }
     if (ds.step) {
       var k = ds.step;
@@ -268,7 +304,7 @@
     if (ds.chip) { draft[ds.chip] = !draft[ds.chip]; normalize(draft); render(); return; }
 
     if (t.id === 'saveRound') {
-      state.log.push(Object.assign({ type: 'round' }, draft));
+      state.log.push(Object.assign({ type: 'round' }, roundFromDraft()));
       draft = newDraft(); save(); render(); window.scrollTo(0, 0); return;
     }
     if (t.id === 'nagari') {

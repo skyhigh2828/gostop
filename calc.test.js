@@ -33,6 +33,16 @@ check('나가리 1판 뒤 2배', pts({ gwang: 4, pi: 12 }, R, 1), 14);
 check('나가리 2판 연속 뒤 4배', pts({ gwang: 4, pi: 12 }, R, 2), 28);
 check('피박+광박+3고 겹침 = (4+6+2)x2x2x2 = 96점', pts({ gwang: 4, pi: 15, go: 3, pibak: true, gwangbak: true }), 96);
 
+// 점수 바로 입력 방식
+const direct = (o, rules, streak) => C.scoreRound(Object.assign({ direct: true, score: 0, go: 0, shake: 0 }, o), rules || R, streak || 0);
+check('바로 입력 9점 = 9점', direct({ score: 9 }).points, 9);
+check('바로 입력 9점 3고 = (9+2)x2 = 22점', direct({ score: 9, go: 3 }).points, 22);
+check('바로 입력 7점 피박+광박+멍박+고박 = 7x16 = 112점', direct({ score: 7, pibak: true, gwangbak: true, meong: true, gobak: true }).points, 112);
+check('바로 입력 멍박은 룰에서 끄면 무시', direct({ score: 7, meong: true }, Object.assign({}, R, { meongtta: false })).points, 7);
+check('바로 입력 8점 흔들기 1회, 나가리 뒤 = 32점', direct({ score: 8, shake: 1 }, R, 1).points, 32);
+check('바로 입력 5점은 날 수 없음', direct({ score: 5 }).canWin, false);
+check('바로 입력 10점 금액 1,000원', direct({ score: 10 }).amount, 1000);
+
 const low = C.scoreRound(hand({ gwang: 3, pi: 10 }), R, 0);
 check('4점은 7점 미만이라 날 수 없음', low.canWin, false);
 
