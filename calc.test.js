@@ -65,5 +65,38 @@ const s2 = C.settle(log.slice(0, 2), R);
 check('나가리 직후 다음 판 배수 예고 1', s2.nagariStreak, 1);
 check('정산 A 첫 판 뒤 +700원', s2.balances[0], 700);
 
-console.log(fail ? '\n실패 ' + fail + '건' : '\n전부 통과');
+// 3인 고스톱: A가 5점 승, B는 피박, C는 박 없음
+const R3 = Object.assign({}, R, C.defaultsFor(3));
+const r3 = { type: 'round', direct: true, winner: 0, score: 5, go: 0, shake: 0, losers: { 1: { pibak: true }, 2: {} } };
+const s3 = C.settle([r3], R3, 3);
+check('3인: 승자 +1,500원 (피박 1,000 + 500)', s3.balances[0], 1500);
+check('3인: 피박인 B −1,000원', s3.balances[1], -1000);
+check('3인: C −500원', s3.balances[2], -500);
+
+// 3인 고박: B가 고박이면 C 몫(피박 1,000원)까지 B가 낸다
+const r3g = { type: 'round', direct: true, winner: 0, score: 5, go: 0, shake: 0, losers: { 1: { gobak: true }, 2: { pibak: true } } };
+const s3g = C.settle([r3g], R3, 3);
+check('3인 고박: B가 500 + 1,000 = −1,500원', s3g.balances[1], -1500);
+check('3인 고박: C는 0원', s3g.balances[2], 0);
+check('3인 고박: 승자 +1,500원', s3g.balances[0], 1500);
+
+// 3인 첫뻑: 나머지 두 명이 5점 값씩
+const s3e = C.settle([{ type: 'event', kind: 'ppuk1', to: 2, from: [0, 1] }], R3, 3);
+check('3인 첫뻑: 받는 사람 +1,000원', s3e.balances[2], 1000);
+check('3인 첫뻑: 내는 사람 −500원', s3e.balances[0], -500);
+
+// 4인 광팔기: D가 쉬면서 광 2장 팜, A가 4점 승 -> A는 B·C에게 400원씩 받고 D에게 광값 400원
+const r4 = { type: 'round', direct: true, winner: 0, sit: 3, sold: 2, score: 4, go: 0, shake: 0, losers: { 1: {}, 2: {} } };
+const s4 = C.settle([r4], R3, 4);
+check('4인: 승자 +800 −광값 400 = +400원', s4.balances[0], 400);
+check('4인: 쉬는 사람 광값 +400원', s4.balances[3], 400);
+check('4인: 손익 합계 0원', s4.balances.reduce((a, b) => a + b, 0), 0);
+
+const tr = C.transfers([1500, -1000, -500]);
+check('송금 정리 2건', tr.length, 2);
+check('송금 정리: 가장 많이 잃은 사람이 1,000원', tr[0].amount, 1000);
+const tr4 = C.transfers([700, -900, 500, -300]);
+check('4인 송금 정리 합계 1,200원', tr4.reduce((a, t) => a + t.amount, 0), 1200);
+
+console.log(fail ?'\n실패 ' + fail + '건' : '\n전부 통과');
 process.exit(fail ? 1 : 0);
